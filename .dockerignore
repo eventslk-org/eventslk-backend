@@ -1,0 +1,24 @@
+# Exclude build output — the builder stage compiles from source
+target/
+
+# IDE and OS files
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Local environment files — never bake secrets into the image
+.env
+run.sh
+run.cmd
+
+# Logs
+*.log
+app.log
+
+# Frontend directories — not part of the backend image
+admin-frontend/
+client-frontend/
+
+# Reports
+reports/
