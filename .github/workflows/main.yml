@@ -23,12 +23,16 @@ jobs:
           docker build -t kaveengayanga12/eventslk-backend:${{ github.sha }} .
           docker push kaveengayanga12/eventslk-backend:${{ github.sha }}
 
+          # Also tag as 'latest' and push
+          docker tag kaveengayanga12/eventslk-backend:${{ github.sha }} kaveengayanga12/eventslk-backend:latest
+          docker push kaveengayanga12/eventslk-backend:latest
+
       - name: Update K8s Manifests
         run: |
-          git clone https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/EventsLK/eventslk-k8s-manifests.git
+          git clone https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/eventslk-org/eventslk-k8s-manifests.git
           cd eventslk-k8s-manifests
           # Updating the backend deployment file
-          sed -i "s|image: kaveengayanga12/eventslk-backend:.*|image: kaveengayanga12/eventslk-backend:${{ github.sha }}|" k8s/backend-deployment.yaml
+          sed -i "s|image: kaveengayanga12/eventslk-backend:.*|image: kaveengayanga12/eventslk-backend:${{ github.sha }}|" backend-deployment.yaml
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add .
