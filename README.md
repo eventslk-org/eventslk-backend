@@ -1,81 +1,208 @@
-# event-registration-api
+# Event Registration API
 
-Spring Boot backend for an event registration and booking system with REST APIs for managing events, attendees, bookings, and admin operations. The repository also includes frontend sub-projects for both clients and administrators.
+Spring Boot backend for an event registration and booking system. This module provides REST APIs for authentication, event management, user management, and booking operations. It uses JWT-based security, MySQL persistence, and Spring Data JPA.
 
-## 🚀 Technologies Used
+## Tech Stack
 
-- **Java & Spring Boot**
-- **Security:** Spring Security & JWT (JSON Web Tokens)
-- **Database:** MySQL (via Spring Data JPA)
-- **Messaging & Notifications:** Apache Kafka, Spring Boot Mail
-- **Utilities:** Lombok, DotEnv
+- Java 21
+- Spring Boot 3.5
+- Spring Security
+- JWT authentication
+- Spring Data JPA
+- MySQL
+- Lombok
+- Dotenv support for local environment loading
 
-## 📁 Project Structure
+## Features
 
-- `src/main/java/com/event_registration/lk/`: Main backend source code containing Controllers, Services, Repositories, Entities, and DTOs.
-- `admin-frontend/`: HTML/CSS/JS files for the administrator dashboard (managing events, users, etc.).
-- `client-frontend/`: HTML/CSS/JS files for the client-facing event registration platform.
-- `reports/`: Contains analysis and improvement plans for the system.
+- User signup and login with JWT token issuance
+- Event create, read, update, and delete operations
+- Booking creation, lookup by user, and cancellation
+- User lookup, update, and deletion
+- Dockerfile for containerized builds
+- Local run scripts for Linux/macOS and Windows
 
-## 🛠️ Setup & Running Instructions
+## Project Layout
 
-1. **Prerequisites**: Ensure you have Java 17+ and Maven installed. A running MySQL server and Kafka broker is required according to the dependencies.
-2. **Environment Variables**: Create a `.env` file or configure your `application.yml` and `application-dev.yml` with your database credentials, Kafka details, and JWT secrets.
-3. **Run the Backend**:
-   Use the provided run scripts depending on your OS:
-   - Linux/Mac: `./run.sh`
-   - Windows: `./run.cmd`
-   
-   Alternatively, use Maven:
-   ```bash
-   mvn spring-boot:run
-   ```
-4. **Access the Application**:
-   - The backend runs on `http://localhost:8080`.
-   - To use the frontends, open `admin-frontend/index.html` or `client-frontend/index.html` in your browser.
+- `src/main/java/com/event_registration/lk/controller/`: REST controllers
+- `src/main/java/com/event_registration/lk/service/`: service interfaces and implementations
+- `src/main/java/com/event_registration/lk/repository/`: Spring Data repositories
+- `src/main/java/com/event_registration/lk/dto/`: request and response objects
+- `src/main/java/com/event_registration/lk/entity/`: JPA entities
+- `src/main/resources/`: application configuration
+- `reports/`: analysis and planning documents for the wider project
 
----
+## Requirements
 
-## 🔌 API Documentation
+- JDK 21
+- Maven 3.9+
+- MySQL 8+
 
-The backend exposes several RESTful endpoints to manage authentication, users, events, and bookings.
+## Configuration
 
-### 1. Authentication (`/auth`)
-Handles user registration and login endpoints utilizing JWT for security.
+The application starts with the `dev` profile active by default.
 
-| Method | Endpoint      | Description                                                          |
-|--------|---------------|----------------------------------------------------------------------|
-| `POST` | `/auth/signup`| Registers a new user. Expects a `User` object.                       |
-| `POST` | `/auth/login` | Authenticates a user. Expects `email` and `password`. Returns JWT.   |
-| `GET`  | `/auth`       | Health check endpoint for auth context.                              |
+Required environment variables:
 
-### 2. Events (`/event`)
-Handles CRUD operations for events in the system.
+- `DB_NAME`
+- `DB_USERNAME`
+- `DB_PASSWORD`
+- `JWT_SECRET`
 
-| Method   | Endpoint           | Description                                                        |
-|----------|--------------------|--------------------------------------------------------------------|
-| `GET`    | `/event`           | Retrieves a list of all scheduled events.                          |
-| `POST`   | `/event`           | Creates a new event. Expects an `Event` object.                    |
-| `PUT`    | `/event`           | Updates an existing event. Expects an updated `Event` object.      |
-| `DELETE` | `/event/{eventId}` | Deletes a specific event from the system by ID.                    |
+Optional environment variables:
 
-### 3. Bookings (`/book`)
-Manages event ticket bookings and cancellations.
+- `DB_HOST` default: `localhost`
+- `DB_PORT` default: `3306`
 
-| Method   | Endpoint             | Description                                                            |
-|----------|----------------------|------------------------------------------------------------------------|
-| `POST`   | `/book`              | Books an event for a user. Expects a `BookingRequest` object.          |
-| `GET`    | `/book/user/{userId}`| Retrieves complete booking details and history for a specific user ID. |
-| `DELETE` | `/book/{bookingId}`  | Cancels an existing booking by its ID.                                 |
+The dev profile config uses a MySQL connection string like:
 
-### 4. Users (`/user`)
-Handles user-specific account operations and administration retrieval tasks.
+`jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME}`
 
-| Method   | Endpoint              | Description                                                          |
-|----------|-----------------------|----------------------------------------------------------------------|
-| `GET`    | `/user`               | Retrieves a list of all registered users (Admin typically).          |
-| `GET`    | `/user/email/{email}` | Retrieves full user details associated with a specific email address.|
-| `PUT`    | `/user/{userId}`      | Updates a user's details. Expects an updated `User` object.          |
-| `DELETE` | `/user/{userId}`      | Deletes a user account by their user ID.                             |
-| `GET`    | `/user/hello`         | Simple testing endpoint returning a greeting with current date/time. |
+The application also loads a local `.env` file at startup if one is present.
+
+## Run Locally
+
+### Option 1: Maven
+
+```bash
+mvn clean package
+mvn spring-boot:run
+```
+
+### Option 2: Build JAR and run
+
+```bash
+mvn clean package
+java -jar target/EventRegistrationAPI-1.0-SNAPSHOT.jar
+```
+
+### Option 3: Provided scripts
+
+- Linux/macOS: `./run.sh`
+- Windows: `run.cmd`
+
+The scripts export the required database and JWT variables before launching the JAR.
+
+## Docker
+
+Build the image:
+
+```bash
+docker build -t event-registration-api .
+```
+
+Run the container:
+
+```bash
+docker run --rm -p 8080:8080 \
+   -e DB_NAME=event_reg_db \
+   -e DB_USERNAME=root \
+   -e DB_PASSWORD=mysql \
+   -e JWT_SECRET=change-me \
+   event-registration-api
+```
+
+## Base URL
+
+The app runs on `http://localhost:8080` by default.
+
+## API Overview
+
+Security behavior in the current configuration:
+
+- `POST /auth/**` is public
+- `GET /event` is public
+- `/event/**` other than `GET /event` requires the `ADMIN` role
+- `/book/**` requires authentication
+- `/user/**` requires authentication
+
+### Authentication
+
+Base path: `/auth`
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `POST` | `/auth/signup` | Create a new user account |
+| `POST` | `/auth/login` | Authenticate a user and return a JWT token |
+| `GET` | `/auth` | Simple hello endpoint |
+
+Example login payload:
+
+```json
+{
+   "email": "user@example.com",
+   "password": "secret123"
+}
+```
+
+### Events
+
+Base path: `/event`
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/event` | List all events |
+| `POST` | `/event` | Create a new event |
+| `PUT` | `/event` | Update an existing event |
+| `DELETE` | `/event/{eventId}` | Delete an event by ID |
+
+Event payload fields:
+
+- `eventId`
+- `name`
+- `description`
+- `priceRanges` with `label` and `price`
+- `dates` as a list of `LocalDateTime` values
+- `location`
+- `image` as bytes if required by the client
+
+### Bookings
+
+Base path: `/book`
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `POST` | `/book` | Create a booking |
+| `GET` | `/book/user/{userId}` | Get booking details for a user |
+| `DELETE` | `/book/{bookingId}` | Cancel a booking |
+
+Example booking payload:
+
+```json
+{
+   "eventId": "E123456789",
+   "userId": 1,
+   "localDateTime": "2026-04-13T10:30:00"
+}
+```
+
+### Users
+
+Base path: `/user`
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/user` | List all users |
+| `GET` | `/user/email/{email}` | Get a user by email |
+| `PUT` | `/user/{userId}` | Update a user |
+| `DELETE` | `/user/{userId}` | Delete a user |
+| `GET` | `/user/hello` | Test endpoint that returns the current date and time |
+
+Example user payload:
+
+```json
+{
+   "username": "Jane Doe",
+   "password": "secret123",
+   "email": "jane@example.com",
+   "role": "USER"
+}
+```
+
+## Notes
+
+- Event IDs are generated automatically with an `E` prefix.
+- Booking IDs are generated automatically with a `B` prefix.
+- Ticket numbers are generated automatically when a booking is created.
+- If you extend the API, keep the security rules in `SecurityConfig` aligned with the new routes.
 
