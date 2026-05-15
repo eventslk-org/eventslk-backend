@@ -4,6 +4,11 @@ import com.event_registration.lk.dto.BookingOrder;
 import com.event_registration.lk.dto.request.BookingRequest;
 import com.event_registration.lk.dto.response.BookingResponse;
 import com.event_registration.lk.entity.BookingOrderEntity;
+import com.event_registration.lk.entity.EventEntity;
+import com.event_registration.lk.entity.UserEntity;
+import com.event_registration.lk.kafka.BookingCancelledEvent;
+import com.event_registration.lk.kafka.BookingConfirmedEvent;
+import com.event_registration.lk.kafka.NotificationProducer;
 import com.event_registration.lk.repository.BookingRepository;
 import com.event_registration.lk.repository.EventRepository;
 import com.event_registration.lk.repository.UserRepository;
@@ -17,6 +22,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -30,13 +36,18 @@ public class BookingServiceImpl implements BookingService {
     EventRepository eventRepository;
     UserRepository userRepository;
     ObjectMapper objectMapper;
+    NotificationProducer notificationProducer;
 
-    public BookingServiceImpl(BookingRepository bookingRepository, EventRepository eventRepository, UserRepository userRepository, ObjectMapper objectMapper) {
+    public BookingServiceImpl(BookingRepository bookingRepository, EventRepository eventRepository,
+            UserRepository userRepository, ObjectMapper objectMapper,
+            NotificationProducer notificationProducer) {
         this.bookingRepository = bookingRepository;
         this.eventRepository = eventRepository;
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;
+        this.notificationProducer = notificationProducer;
     }
+
     //Done
     @Override
     public BookingResponse bookEvent(BookingRequest bookingRequest) {
@@ -64,8 +75,24 @@ public class BookingServiceImpl implements BookingService {
                     .build();
 
             BookingOrderEntity bookingOrderEntity = objectMapper.convertValue(order, BookingOrderEntity.class);
-
             bookingRepository.save(bookingOrderEntity);
+
+            // Publish booking confirmed notification
+            Optional<UserEntity> userOpt = userRepository.findById(bookingRequest.getUserId());
+            EventEntity event = eventRepository.findEventEntityByEventIdContainingIgnoreCase(bookingRequest.getEventId());
+            if (userOpt.isPresent() && event != null) {
+                String eventDate = (event.getDates() != null && !event.getDates().isEmpty())
+                        ? event.getDates().get(0).format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm"))
+                        : "See event details";
+                notificationProducer.publishBookingConfirmed(BookingConfirmedEvent.builder()
+                        .email(userOpt.get().getEmail())
+                        .username(userOpt.get().getUsername())
+                        .eventName(event.getName())
+                        .ticketNumber(order.getTicketNumber())
+                        .eventDate(eventDate)
+                        .bookingId(order.getBookingId())
+                        .build());
+            }
 
             ArrayList<BookingOrder> bookingOrderList = new ArrayList<>();
             bookingOrderList.add(order);
@@ -75,47 +102,63 @@ public class BookingServiceImpl implements BookingService {
                     .orderList(bookingOrderList)
                     .build();
         } catch (Exception e) {
-            log.info("error in booking event : "+e.getMessage());
+            log.info("error in booking event : " + e.getMessage());
             return BookingResponse.builder()
                     .status("booking")
-                    .message("unsuccess : "+e.getMessage())
+                    .message("unsuccess : " + e.getMessage())
                     .build();
         }
     }
+
     //Done
     @Override
     @Transactional
     public BookingResponse cancelBooking(String bookingId) {
-        try{
-            if(!bookingRepository.existsByBookingId(bookingId)){
+        try {
+            Optional<BookingOrderEntity> bookingOpt = bookingRepository.findById(bookingId);
+            if (bookingOpt.isEmpty()) {
                 return BookingResponse.builder()
                         .status("booking-cancel")
-                        .message("no record exists for booking id : " + bookingId + "")
+                        .message("no record exists for booking id : " + bookingId)
                         .build();
             }
+            BookingOrderEntity booking = bookingOpt.get();
             bookingRepository.deleteById(bookingId);
+
+            // Publish booking cancelled notification
+            Optional<UserEntity> userOpt = userRepository.findById(booking.getUserId());
+            EventEntity event = eventRepository.findEventEntityByEventIdContainingIgnoreCase(booking.getEventId());
+            if (userOpt.isPresent() && event != null) {
+                notificationProducer.publishBookingCancelled(BookingCancelledEvent.builder()
+                        .email(userOpt.get().getEmail())
+                        .username(userOpt.get().getUsername())
+                        .eventName(event.getName())
+                        .bookingId(bookingId)
+                        .build());
+            }
+
             return BookingResponse.builder()
                     .status("booking-cancel")
                     .message("success")
                     .build();
-        }catch (Exception e){
+        } catch (Exception e) {
             return BookingResponse.builder()
                     .status("booking-cancel")
-                    //.message("error occurred : "+e.getMessage())
                     .message("unsuccess")
                     .build();
         }
     }
+
     //Done
     @Override
     public BookingResponse getUserBookingDetails(Long userId) {
         List<BookingOrderEntity> allByUserId = bookingRepository.findAllByUserId(userId);
-        if (allByUserId.isEmpty()){
+        if (allByUserId.isEmpty()) {
             return BookingResponse.builder()
                     .status("booking-details")
                     .message("no record exists for user id : " + userId)
                     .build();
-        }else {
+        } else {
             List<BookingOrder> collect = allByUserId.stream().map(this::toBookingOrder).collect(Collectors.toList());
             return BookingResponse.builder()
                     .status("booking-details")
@@ -125,8 +168,7 @@ public class BookingServiceImpl implements BookingService {
         }
     }
 
-    //convert BookingOrder entity to dto
-    private BookingOrder toBookingOrder(BookingOrderEntity entity){
+    private BookingOrder toBookingOrder(BookingOrderEntity entity) {
         return BookingOrder.builder()
                 .bookingId(entity.getBookingId())
                 .eventId(entity.getEventId())
@@ -136,8 +178,8 @@ public class BookingServiceImpl implements BookingService {
                 .orderStatus(entity.getOrderStatus())
                 .build();
     }
-    //Automatically generate ticket number
-    private String generateTicketNumber(){
+
+    private String generateTicketNumber() {
         LocalDateTime dateTime = LocalDateTime.now();
 
         String date = dateTime.format(DateTimeFormatter.ofPattern("ddMMyyyy"));
@@ -148,9 +190,9 @@ public class BookingServiceImpl implements BookingService {
                 dateTime.toLocalDate().plusDays(1).atStartOfDay()
         );
         String countSeq = String.format("%05d", todayCount);
-        return "TKT"+countSeq+time+date;
+        return "TKT" + countSeq + time + date;
     }
-    //Automatically generate booking id
+
     private String generateBookingId() {
         String prefix = "B";
         String uniquePart = UUID.randomUUID().toString()

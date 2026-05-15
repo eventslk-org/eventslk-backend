@@ -170,8 +170,8 @@ public class SecurityConfig {
                 // 2. Disable CSRF for stateless APIs
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        // 3. Permitting health checks and auth endpoints
                         .requestMatchers("/auth/**").permitAll()
+                        .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/event").permitAll()
                         .requestMatchers("/event/**").hasRole("ADMIN")
                         .requestMatchers("/admin/**").hasRole("ADMIN")
@@ -198,9 +198,8 @@ public class SecurityConfig {
 
     @Bean
     public AuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
-        provider.setPasswordEncoder(passwordEncoder()); // Use the bean defined above
-        provider.setUserDetailsService(userDetailsService);
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
+        provider.setPasswordEncoder(passwordEncoder());
         return provider;
     }
 }

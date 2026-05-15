@@ -3,41 +3,64 @@ package com.event_registration.lk.service.impl;
 import com.event_registration.lk.dto.User;
 import com.event_registration.lk.dto.request.LoginRequest;
 import com.event_registration.lk.dto.response.UserResponse;
+import com.event_registration.lk.entity.OutboxEvent;
 import com.event_registration.lk.entity.UserEntity;
+import com.event_registration.lk.kafka.NotificationProducer;
+import com.event_registration.lk.kafka.UserSignupEvent;
+import com.event_registration.lk.repository.OutboxEventRepository;
 import com.event_registration.lk.repository.UserRepository;
 import com.event_registration.lk.service.UserService;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @Slf4j
 public class UserServiceImpl implements UserService {
 
     UserRepository userRepository;
+    OutboxEventRepository outboxEventRepository;
     PasswordEncoder passwordEncoder;
     ObjectMapper objectMapper;
     AuthenticationManager authenticationManager;
     JwtServiceImpl jwtService;
+    NotificationProducer notificationProducer;
 
-    public UserServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder,
-            AuthenticationManager authenticationManager, JwtServiceImpl jwtService) {
+    @Value("${app.base-url:http://localhost:8081}")
+    private String appBaseUrl;
+
+    public UserServiceImpl(UserRepository userRepository,
+            OutboxEventRepository outboxEventRepository,
+            PasswordEncoder passwordEncoder,
+            AuthenticationManager authenticationManager, JwtServiceImpl jwtService,
+            NotificationProducer notificationProducer) {
         this.userRepository = userRepository;
+        this.outboxEventRepository = outboxEventRepository;
         this.passwordEncoder = passwordEncoder;
         this.objectMapper = new ObjectMapper();
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
+        this.notificationProducer = notificationProducer;
     }
 
-    // Done
     @Override
+    @Transactional
     public UserResponse addUser(User user) {
+
+        if (userRepository.existsByEmailContainingIgnoreCase(user.getEmail())) {
+            return new UserResponse("signup", "email already in use");
+        }
 
         UserEntity userEntity = UserEntity.builder()
                 .username(user.getUsername())
@@ -45,18 +68,38 @@ public class UserServiceImpl implements UserService {
                 .password(passwordEncoder.encode(user.getPassword()))
                 .role(user.getRole())
                 .build();
-        if (userRepository.existsByEmailContainingIgnoreCase(user.getEmail())) {
-            return new UserResponse("signup", "email already in use");
-        }
-        try {
-            userRepository.save(userEntity);
 
-            // send email using producer
-            // signupEventProducer.publishUserSignupEvent(userEntity.getEmail());
+        try {
+            UserEntity savedUser = userRepository.save(userEntity);
+
+            // Placeholder verification token until /auth/verify-email is implemented.
+            String verificationToken = UUID.randomUUID().toString();
+
+            UserSignupEvent signupEvent = UserSignupEvent.builder()
+                    .email(savedUser.getEmail())
+                    .username(savedUser.getUsername())
+                    .verificationToken(verificationToken)
+                    .verificationLink(appBaseUrl + "/auth/verify-email?token=" + verificationToken)
+                    .build();
+
+            String payload = objectMapper.writeValueAsString(signupEvent);
+
+            OutboxEvent outboxEvent = OutboxEvent.builder()
+                    .aggregateType("User")
+                    .aggregateId(String.valueOf(savedUser.getUserId()))
+                    .type("UserSignupEvent")
+                    .payload(payload)
+                    .status(OutboxEvent.Status.PENDING)
+                    .build();
+
+            outboxEventRepository.save(outboxEvent);
 
             return new UserResponse("signup", "success");
+        } catch (JsonProcessingException e) {
+            // Force rollback of user insert if we can't serialize the event.
+            throw new RuntimeException("Failed to serialize UserSignupEvent for outbox", e);
         } catch (Exception e) {
-            return new UserResponse("signup", "unsuccess");
+            throw new RuntimeException("Failed to register user", e);
         }
     }
 

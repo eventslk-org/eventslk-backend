@@ -1,6 +1,70 @@
-spring :
-  profiles :
-    active : dev
+spring:
+  application:
+    name: event-registration-api
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  threads:
+    virtual:
+      enabled: true
+  jpa:
+    properties:
+      hibernate:
+        # 1. Enables batching for multiple inserts/updates
+        jdbc.batch_size: 25
+        order_inserts: true
+        order_updates: true
+        # 2. Performance: Avoids extra 'select' before 'update'
+        batch_versioned_data: true
+  jackson:
+    default-property-inclusion: non_null #Don't send 'null' values in the JSON response
+    serialization:
+      WRITE_DATES_AS_TIMESTAMPS: false # Use ISO-8601 format for dates instead of timestamps
 
-server :
-  port : 8080
+  datasource:
+    hikari:
+      # Connection pool tuning
+      maximum-pool-size: 15
+      minimum-idle: 5
+      idle-timeout: 30000
+      max-lifetime: 1800000 # 30min
+
+
+server:
+  port: ${SERVER_PORT:8081}
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain
+    min-response-size: 2048 # Compress responses larger than 1KB
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE:http://discovery:changeit@localhost:8761/eureka/}
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${server.port}
+    metadata-map:
+      env: ${SERVICE_ENV:dev}
+      version: ${SERVICE_VERSION:local}
+      zone: ${INSTANCE_ZONE:local}
+      team: ${SERVICE_TEAM:platform}
+      commit: ${GIT_COMMIT:unknown}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+    prometheus:
+      enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
