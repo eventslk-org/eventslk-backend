@@ -8,6 +8,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.Instant;
+
 import lombok.extern.slf4j.Slf4j;
 
 @Configuration
@@ -23,6 +25,8 @@ public class AdminUserInitializer {
                         .email("admin123@viago.com")
                         .password(passwordEncoder.encode("admin123"))
                         .role(Role.ADMIN)
+                        .emailVerified(true)
+                        .emailVerifiedAt(Instant.now())
                         .build();
                 userRepository.save(admin);
                 log.info("Default admin user created: admin123@viago.com");

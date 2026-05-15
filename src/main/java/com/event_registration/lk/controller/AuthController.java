@@ -47,6 +47,22 @@ public class AuthController {
         return ResponseEntity.ok("hello auth");
     }
 
+    @GetMapping("/verify-email")
+    public ResponseEntity<UserResponse> verifyEmail(@RequestParam("token") String token) {
+        UserResponse response = userService.verifyEmail(token);
+        return switch (response.getMessage()) {
+            case "success", "already verified" -> ResponseEntity.ok(response);
+            case "token expired" -> ResponseEntity.status(HttpStatus.GONE).body(response);
+            default -> ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        };
+    }
 
+    @PostMapping("/resend-verification")
+    public ResponseEntity<UserResponse> resendVerification(@RequestBody ResendVerificationRequest body) {
+        UserResponse response = userService.resendVerification(body == null ? null : body.email());
+        return ResponseEntity.accepted().body(response);
+    }
+
+    public record ResendVerificationRequest(String email) {}
 
 }

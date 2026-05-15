@@ -23,5 +23,6 @@ public interface UserRepository extends CrudRepository<UserEntity,Long> {
     Optional<UserEntity> findByEmailIgnoreCase(String email);
     boolean existsByEmailContainingIgnoreCase(String email);
 
+    Optional<UserEntity> findByVerificationToken(String verificationToken);
 
 }

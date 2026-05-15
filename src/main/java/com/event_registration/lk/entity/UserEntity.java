@@ -7,6 +7,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.Instant;
+
 @Entity
 @Data
 @NoArgsConstructor
@@ -26,5 +28,13 @@ public class UserEntity {
     @Enumerated(EnumType.STRING)
     private Role role;
 
+    @Column(nullable = false)
+    private boolean emailVerified;
 
+    @Column(length = 64)
+    private String verificationToken;
+
+    private Instant verificationTokenExpiresAt;
+
+    private Instant emailVerifiedAt;
 }

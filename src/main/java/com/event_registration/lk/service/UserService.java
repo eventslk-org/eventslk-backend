@@ -13,4 +13,6 @@ public interface UserService {
     public UserResponse updateUser(User user);
     public UserResponse getAllUsers();
     public UserResponse getUserByEmail(String email);
+    public UserResponse verifyEmail(String token);
+    public UserResponse resendVerification(String email);
 }

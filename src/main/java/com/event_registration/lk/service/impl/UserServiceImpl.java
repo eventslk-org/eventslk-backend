@@ -11,7 +11,9 @@ import com.event_registration.lk.repository.OutboxEventRepository;
 import com.event_registration.lk.repository.UserRepository;
 import com.event_registration.lk.service.UserService;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -20,6 +22,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Optional;
@@ -40,6 +44,9 @@ public class UserServiceImpl implements UserService {
     @Value("${app.base-url:http://localhost:8081}")
     private String appBaseUrl;
 
+    @Value("${app.verification.token-ttl-hours:24}")
+    private long verificationTokenTtlHours;
+
     public UserServiceImpl(UserRepository userRepository,
             OutboxEventRepository outboxEventRepository,
             PasswordEncoder passwordEncoder,
@@ -48,7 +55,9 @@ public class UserServiceImpl implements UserService {
         this.userRepository = userRepository;
         this.outboxEventRepository = outboxEventRepository;
         this.passwordEncoder = passwordEncoder;
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
         this.notificationProducer = notificationProducer;
@@ -62,18 +71,21 @@ public class UserServiceImpl implements UserService {
             return new UserResponse("signup", "email already in use");
         }
 
+        String verificationToken = UUID.randomUUID().toString();
+        Instant expiresAt = Instant.now().plus(verificationTokenTtlHours, ChronoUnit.HOURS);
+
         UserEntity userEntity = UserEntity.builder()
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .password(passwordEncoder.encode(user.getPassword()))
                 .role(user.getRole())
+                .emailVerified(false)
+                .verificationToken(verificationToken)
+                .verificationTokenExpiresAt(expiresAt)
                 .build();
 
         try {
             UserEntity savedUser = userRepository.save(userEntity);
-
-            // Placeholder verification token until /auth/verify-email is implemented.
-            String verificationToken = UUID.randomUUID().toString();
 
             UserSignupEvent signupEvent = UserSignupEvent.builder()
                     .email(savedUser.getEmail())
@@ -112,6 +124,11 @@ public class UserServiceImpl implements UserService {
         if (entity == null) {
             return new UserResponse("login", "user not found");
         }
+
+        if (!entity.isEmailVerified()) {
+            return new UserResponse("login", "email not verified");
+        }
+
         User user = objectMapper.convertValue(entity, User.class);
 
         user.setPassword(null);
@@ -184,5 +201,88 @@ public class UserServiceImpl implements UserService {
         User user = objectMapper.convertValue(entity, User.class);
         user.setPassword(null);
         return new UserResponse("get user by email", "success", user);
+    }
+
+    @Override
+    @Transactional
+    public UserResponse verifyEmail(String token) {
+        if (token == null || token.isBlank()) {
+            return new UserResponse("verify-email", "invalid token");
+        }
+
+        Optional<UserEntity> match = userRepository.findByVerificationToken(token);
+        if (match.isEmpty()) {
+            return new UserResponse("verify-email", "invalid token");
+        }
+
+        UserEntity entity = match.get();
+
+        if (entity.isEmailVerified()) {
+            return new UserResponse("verify-email", "already verified");
+        }
+
+        Instant expiresAt = entity.getVerificationTokenExpiresAt();
+        if (expiresAt == null || Instant.now().isAfter(expiresAt)) {
+            return new UserResponse("verify-email", "token expired");
+        }
+
+        entity.setEmailVerified(true);
+        entity.setEmailVerifiedAt(Instant.now());
+        entity.setVerificationToken(null);
+        entity.setVerificationTokenExpiresAt(null);
+        userRepository.save(entity);
+
+        return new UserResponse("verify-email", "success");
+    }
+
+    @Override
+    @Transactional
+    public UserResponse resendVerification(String email) {
+        // Generic response — do not leak whether the email is registered.
+        UserResponse generic = new UserResponse("resend-verification",
+                "if the account exists and is unverified, a new email has been sent");
+
+        if (email == null || email.isBlank()) {
+            return generic;
+        }
+
+        Optional<UserEntity> match = userRepository.findByEmailIgnoreCase(email);
+        if (match.isEmpty()) {
+            return generic;
+        }
+
+        UserEntity entity = match.get();
+        if (entity.isEmailVerified()) {
+            return generic;
+        }
+
+        String newToken = UUID.randomUUID().toString();
+        Instant expiresAt = Instant.now().plus(verificationTokenTtlHours, ChronoUnit.HOURS);
+        entity.setVerificationToken(newToken);
+        entity.setVerificationTokenExpiresAt(expiresAt);
+        userRepository.save(entity);
+
+        try {
+            UserSignupEvent signupEvent = UserSignupEvent.builder()
+                    .email(entity.getEmail())
+                    .username(entity.getUsername())
+                    .verificationToken(newToken)
+                    .verificationLink(appBaseUrl + "/auth/verify-email?token=" + newToken)
+                    .build();
+
+            OutboxEvent outboxEvent = OutboxEvent.builder()
+                    .aggregateType("User")
+                    .aggregateId(String.valueOf(entity.getUserId()))
+                    .type("UserSignupEvent")
+                    .payload(objectMapper.writeValueAsString(signupEvent))
+                    .status(OutboxEvent.Status.PENDING)
+                    .build();
+
+            outboxEventRepository.save(outboxEvent);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to serialize UserSignupEvent for outbox", e);
+        }
+
+        return generic;
     }
 }

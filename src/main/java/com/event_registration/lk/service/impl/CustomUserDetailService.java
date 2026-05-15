@@ -25,6 +25,7 @@ public class CustomUserDetailService implements UserDetailsService {
                 .username(user.getEmail())
                 .password(user.getPassword())
                 .roles(user.getRole().name()) // Assuming enum Role.USER, etc.
+                .disabled(!user.isEmailVerified())
                 .build();
     }
 }
