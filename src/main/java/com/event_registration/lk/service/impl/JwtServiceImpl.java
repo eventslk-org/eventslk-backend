@@ -1,6 +1,9 @@
 package com.event_registration.lk.service.impl;
 
+import com.event_registration.lk.dto.Role;
 import com.event_registration.lk.dto.request.LoginRequest;
+import com.event_registration.lk.entity.UserEntity;
+import com.event_registration.lk.repository.UserRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -51,18 +54,28 @@ public class JwtServiceImpl {
     @Value("${jwt.secret}")
     private String SECRET;
 
-    public JwtServiceImpl() {
-        // Secret is injected via @Value
+    private final UserRepository userRepository;
+
+    public JwtServiceImpl(UserRepository userRepository) {
+        this.userRepository = userRepository;
     }
+
     private SecretKey getSecretKey() {
         byte[] keyBytes = Base64.getDecoder().decode(SECRET);
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
     public String generateJwtToken(LoginRequest loginRequest) {
-        // String subject = loginRequest.getEmail() != null ? loginRequest.getEmail() : loginRequest.getEmail();
         String subject = loginRequest.getEmail();
+
+        // Embed the role(s) so the API Gateway can forward them as X-User-Roles
+        // without needing its own database lookup.
+        UserEntity user = userRepository.findUserEntityByEmailIgnoreCase(subject);
+        Role role = (user != null && user.getRole() != null) ? user.getRole() : Role.USER;
+
         Map<String, Object> claims = new HashMap<>();
+        claims.put("roles", role.name());
+
         return Jwts.builder()
                 .claims()
                 .add(claims)
