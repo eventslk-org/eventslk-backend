@@ -16,13 +16,13 @@ import java.util.UUID;
 
 @Slf4j
 @Service
-// @Primary //main service for event handling
-public class EventServiceImpl implements EventService {
+@Primary //main service for event handling
+public class EventServiceImplv2 implements EventService {
 
     EventRepository eventRepository;
     ObjectMapper objectMapper;
 
-    public EventServiceImpl(EventRepository eventRepository, ObjectMapper objectMapper) {
+    public EventServiceImplv2(EventRepository eventRepository, ObjectMapper objectMapper) {
         this.eventRepository = eventRepository;
         this.objectMapper = objectMapper;
     }
