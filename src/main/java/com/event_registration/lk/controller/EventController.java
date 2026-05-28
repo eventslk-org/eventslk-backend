@@ -2,30 +2,35 @@ package com.event_registration.lk.controller;
 
 import com.event_registration.lk.dto.Event;
 import com.event_registration.lk.dto.response.EventResponse;
+import com.event_registration.lk.dto.response.PresignedUrlResponse;
+import com.event_registration.lk.service.CloudStorageService;
 import com.event_registration.lk.service.EventService;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.HttpStatus;
 import jakarta.validation.Valid;
-//Done
+import jakarta.validation.constraints.NotBlank;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/event")
 @CrossOrigin
 @Slf4j
 public class EventController {
 
-    EventService eventService;
+    private final EventService eventService;
+    private final CloudStorageService cloudStorageService;
 
-    public EventController(EventService eventService) {
+    public EventController(EventService eventService, CloudStorageService cloudStorageService) {
         this.eventService = eventService;
+        this.cloudStorageService = cloudStorageService;
     }
 
-    //Done
     @PostMapping
     public ResponseEntity<EventResponse> addEvent(@Valid @RequestBody Event event) {
-        log.info("Received event: name={}, description={}, location={}, dates={}", 
-                event.getName(), event.getDescription(), event.getLocation(), event.getDates());
+        log.info("Received event: name={}, location={}, seats={}", event.getName(), event.getLocation(), event.getTotalSeats());
         EventResponse response = eventService.addEvent(event);
         if ("success".equals(response.getMessage())) {
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -56,4 +61,25 @@ public class EventController {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
     }
 
+    /**
+     * Returns a short-lived S3 presigned PUT URL so the frontend can upload an
+     * event image directly to S3 without passing binary data through this service.
+     *
+     * Flow:
+     *   1. Admin calls  GET /event/upload-url?filename=banner.jpg
+     *   2. Frontend PUTs the file to the returned {@code uploadUrl} (Content-Type: image/*)
+     *   3. Frontend passes the returned {@code imageUrl} inside the Event JSON when
+     *      calling POST /event or PUT /event.
+     *
+     * Requires ADMIN role (enforced by SecurityConfig).
+     */
+    @GetMapping("/upload-url")
+    public ResponseEntity<PresignedUrlResponse> getUploadUrl(
+            @RequestParam @NotBlank(message = "filename is required") String filename) {
+        String sanitised = filename.replaceAll("[^a-zA-Z0-9._-]", "_");
+        String objectKey = "events/" + UUID.randomUUID() + "/" + sanitised;
+        PresignedUrlResponse response = cloudStorageService.generatePresignedUploadUrl(objectKey, 15);
+        log.info("[upload-url] generated for key={}", objectKey);
+        return ResponseEntity.ok(response);
+    }
 }
