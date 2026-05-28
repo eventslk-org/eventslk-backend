@@ -140,6 +140,12 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- AWS SDK v2 – S3 presigned URL generation for direct frontend uploads -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+        </dependency>
+
     </dependencies>
 
     <dependencyManagement>
@@ -148,6 +154,13 @@
 				<groupId>org.springframework.cloud</groupId>
 				<artifactId>spring-cloud-dependencies</artifactId>
 				<version>${spring-cloud.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<dependency>
+				<groupId>software.amazon.awssdk</groupId>
+				<artifactId>bom</artifactId>
+				<version>2.29.0</version>
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>
