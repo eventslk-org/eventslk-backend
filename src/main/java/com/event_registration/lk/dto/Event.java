@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
@@ -39,6 +40,14 @@ public class Event {
     @JsonProperty("location")
     private String location;
 
-    @JsonProperty("image")
-    private byte[] image;
+    // Frontend uploads image directly to S3 via presigned URL and sends back the final CDN/S3 URL.
+    @JsonProperty("imageUrl")
+    private String imageUrl;
+
+    @Min(value = 0, message = "Total seats must be non-negative")
+    @JsonProperty("totalSeats")
+    private int totalSeats;
+
+    @JsonProperty("availableSeats")
+    private int availableSeats;
 }
