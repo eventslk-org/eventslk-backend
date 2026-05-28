@@ -26,4 +26,6 @@ public class EventResponse {
         this.status = status;
         this.eventList = eventList;
     }
+
+
 }
