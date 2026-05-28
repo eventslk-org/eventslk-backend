@@ -1,13 +1,12 @@
 package com.event_registration.lk.entity;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.GenericGenerator;
 
 import java.time.LocalDateTime;
 
@@ -24,6 +23,9 @@ public class BookingOrderEntity {
     private String eventId;
     private String ticketNumber;
     private LocalDateTime orderedDate;
-    private String orderStatus; //confirm or canceled
+    private String orderStatus;
 
+    // Number of seats reserved; needed to restore availableSeats on cancellation.
+    @Column(name = "seat_count", nullable = false)
+    private int seatCount;
 }
