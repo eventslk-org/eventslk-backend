@@ -40,7 +40,8 @@ public class EventServiceImpl implements EventService {
                             .dates(event.getDates())
                             .priceRanges(event.getPriceRanges())
                             .location(event.getLocation())
-                            .image(event.getImage())
+                            // .image(event.getImage())
+                            .imageUrl(null)
                             .build()
             );
             return new EventResponse("event-add","success");
@@ -72,7 +73,8 @@ public class EventServiceImpl implements EventService {
                             .description(event.getDescription())
                             .dates(event.getDates())
                             .location(event.getLocation())
-                            .image(event.getImage())
+                            //.image(event.getImage())
+                            .imageUrl(null)
                             .priceRanges(event.getPriceRanges())
                             .build()
             );
