@@ -1,117 +1,70 @@
 package com.event_registration.lk.service.impl;
 
+import com.event_registration.lk.config.JwtKeyConfig.RsaKeyPair;
+import com.event_registration.lk.config.JwtProperties;
 import com.event_registration.lk.dto.Role;
 import com.event_registration.lk.dto.request.LoginRequest;
 import com.event_registration.lk.entity.UserEntity;
 import com.event_registration.lk.repository.UserRepository;
-import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
-import javax.crypto.SecretKey;
-import java.util.Base64;
+import java.time.Instant;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.function.Function;
+import java.util.List;
+import java.util.UUID;
 
+/**
+ * Issues RS256-signed access tokens.
+ *
+ * <p>This service is the token <em>issuer</em>: it signs with the RSA private
+ * key. Verification is performed independently by the resource-server
+ * {@code JwtDecoder} (see {@code SecurityConfig}) using the matching public
+ * key, so this class no longer contains any validation logic — that concern now
+ * lives entirely at the security filter layer.
+ *
+ * <p>Emitted claims follow RFC 7519: {@code iss}, {@code aud}, {@code sub},
+ * {@code iat}, {@code exp}, a unique {@code jti}, and a {@code roles} array
+ * consumed by the authority converter.
+ */
 @Service
 @Slf4j
 public class JwtServiceImpl {
 
-//    private Key SECRET_KEY;
-//
-//    public JwtServiceImpl() {
-//        try {
-//            KeyGenerator keyGenerator = KeyGenerator.getInstance("HmacSHA256");
-//            SecretKey secretKey = keyGenerator.generateKey();
-//            String stingKey = Base64.getEncoder().encodeToString(secretKey.getEncoded());
-//            byte[] decode = Decoders.BASE64.decode(stingKey);
-//            SECRET_KEY = Keys.hmacShaKeyFor(decode);
-//        }catch (Exception e){
-//            log.warn("error in generating secret key");
-//        }
-//
-//    }
-//
-//    public String generateJwtToken(User user) {
-//        Map<String, Object> claims = new HashMap<>();
-//        return Jwts.builder()
-//                .claims()
-//                .add(claims)
-//                .subject(user.getUsername())
-//                .issuedAt(new Date(System.currentTimeMillis()))
-//                .expiration(new Date(System.currentTimeMillis() + 1000 * 60 * 30))
-//                .and()
-//                .signWith(Keys.hmacShaKeyFor(SECRET_KEY.getEncoded()))
-//                .compact();
-//    }
-
-    @Value("${jwt.secret}")
-    private String SECRET;
-
     private final UserRepository userRepository;
+    private final JwtProperties jwtProperties;
+    private final RsaKeyPair rsaKeyPair;
 
-    public JwtServiceImpl(UserRepository userRepository) {
+    public JwtServiceImpl(UserRepository userRepository,
+                          JwtProperties jwtProperties,
+                          RsaKeyPair rsaKeyPair) {
         this.userRepository = userRepository;
-    }
-
-    private SecretKey getSecretKey() {
-        byte[] keyBytes = Base64.getDecoder().decode(SECRET);
-        return Keys.hmacShaKeyFor(keyBytes);
+        this.jwtProperties = jwtProperties;
+        this.rsaKeyPair = rsaKeyPair;
     }
 
     public String generateJwtToken(LoginRequest loginRequest) {
         String subject = loginRequest.getEmail();
 
-        // Embed the role(s) so the API Gateway can forward them as X-User-Roles
-        // without needing its own database lookup.
         UserEntity user = userRepository.findUserEntityByEmailIgnoreCase(subject);
         Role role = (user != null && user.getRole() != null) ? user.getRole() : Role.USER;
 
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("roles", role.name());
+        Instant now = Instant.now();
+        Instant expiry = now.plus(jwtProperties.accessTokenTtl());
 
+        // roles is intentionally a JSON array so additional roles can be added
+        // without changing the token shape or the downstream converter.
         return Jwts.builder()
-                .claims()
-                .add(claims)
+                .issuer(jwtProperties.issuer())
+                .audience().add(jwtProperties.audience()).and()
                 .subject(subject)
-                .issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + 60 * 60 * 1000)) // 1 hour
-                .and()
-                .signWith(getSecretKey())
+                .id(UUID.randomUUID().toString())
+                .issuedAt(Date.from(now))
+                .notBefore(Date.from(now))
+                .expiration(Date.from(expiry))
+                .claim("roles", List.of(role.name()))
+                .signWith(rsaKeyPair.privateKey(), Jwts.SIG.RS256)
                 .compact();
-    }
-
-    public String extractEmail(String token){
-        return extractClaim(token, Claims::getSubject);
-    }
-    private <T> T extractClaim(String token, Function<Claims, T> claimResolver) {
-        final Claims claims = extractAllClaims(token);
-        return claimResolver.apply(claims);
-    }
-
-    private Claims extractAllClaims(String token) {
-        return Jwts.parser()
-                .verifyWith(getSecretKey())
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-    }
-    public boolean validateToken(String token, UserDetails userDetails) {
-        final String userName = extractEmail(token);
-        return (userName.equals(userDetails.getUsername()) && !isTokenExpired(token));
-    }
-
-    private boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
-    }
-
-    private Date extractExpiration(String token) {
-        return extractClaim(token, Claims::getExpiration);
     }
 }
