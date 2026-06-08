@@ -1,0 +1,204 @@
+# ==============================================================================
+# Production profile.
+# - PostgreSQL primary/replica routing (writes → primary, reads → replicas)
+# - Redis Sentinel for HA caching
+# - DDL validate only (migrations handled by Flyway/Liquibase)
+# - All secrets injected via environment variables / secret manager
+# ==============================================================================
+
+spring:
+  # ----------------------------------------------------------------------------
+  # Datasources — primary (writes) and replica (reads).
+  # Wire up an AbstractRoutingDataSource bean that selects based on
+  # TransactionSynchronizationManager.isCurrentTransactionReadOnly().
+  # ----------------------------------------------------------------------------
+  datasource:
+    primary:
+      jdbc-url: jdbc:postgresql://${DB_PRIMARY_HOST}:${DB_PRIMARY_PORT:5432}/${DB_NAME}?sslmode=require&ApplicationName=evtreg-prod-writer
+      username: ${DB_PRIMARY_USERNAME}
+      password: ${DB_PRIMARY_PASSWORD}
+      driver-class-name: org.postgresql.Driver
+      hikari:
+        pool-name: HikariPrimary
+        maximum-pool-size: 20
+        minimum-idle: 5
+        idle-timeout: 30000
+        max-lifetime: 1800000
+        connection-timeout: 20000
+        leak-detection-threshold: 60000
+    replica:
+      # Comma-separated host list enables Postgres JDBC load balancing across replicas.
+      # Driver picks an available host; failed hosts are retried per targetServerType.
+      jdbc-url: jdbc:postgresql://${DB_REPLICA_HOSTS}/${DB_NAME}?sslmode=require&targetServerType=preferSecondary&loadBalanceHosts=true&ApplicationName=evtreg-prod-reader
+      username: ${DB_REPLICA_USERNAME}
+      password: ${DB_REPLICA_PASSWORD}
+      driver-class-name: org.postgresql.Driver
+      hikari:
+        pool-name: HikariReplica
+        maximum-pool-size: 30        # Reads typically outnumber writes — pool larger
+        minimum-idle: 10
+        idle-timeout: 30000
+        max-lifetime: 1800000
+        connection-timeout: 20000
+        read-only: true
+
+  # ----------------------------------------------------------------------------
+  # JPA — validate schema only; migrations are run by Flyway/Liquibase
+  # ----------------------------------------------------------------------------
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc.time_zone: UTC
+        generate_statistics: false
+
+  # ----------------------------------------------------------------------------
+  # Flyway — schema migrations against primary only
+  # ----------------------------------------------------------------------------
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+    validate-on-migrate: true
+
+  # ----------------------------------------------------------------------------
+  # Redis — Sentinel topology (1 master + N replicas behind sentinels)
+  # ----------------------------------------------------------------------------
+  data:
+    redis:
+      password: ${REDIS_PASSWORD}
+      timeout: 2000ms
+      ssl:
+        enabled: ${REDIS_SSL_ENABLED:true}
+      sentinel:
+        master: ${REDIS_SENTINEL_MASTER:evtreg-master}
+        nodes: ${REDIS_SENTINEL_NODES}        # host1:26379,host2:26379,host3:26379
+        password: ${REDIS_SENTINEL_PASSWORD:}
+      lettuce:
+        pool:
+          max-active: 32
+          max-idle: 16
+          min-idle: 4
+          max-wait: 1000ms
+        shutdown-timeout: 200ms
+
+  # ----------------------------------------------------------------------------
+  # Cache — Redis-backed with per-cache TTL strategy
+  # ----------------------------------------------------------------------------
+  cache:
+    type: redis
+    redis:
+      time-to-live: 1800000     # 30 min default; per-cache TTL set in CacheConfig
+      cache-null-values: false
+      use-key-prefix: true
+      key-prefix: "evtreg:prod:"
+
+  # ----------------------------------------------------------------------------
+  # Kafka — production cluster with SASL/SSL
+  # ----------------------------------------------------------------------------
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    properties:
+      security.protocol: ${KAFKA_SECURITY_PROTOCOL:SASL_SSL}
+      sasl.mechanism: ${KAFKA_SASL_MECHANISM:SCRAM-SHA-512}
+      sasl.jaas.config: ${KAFKA_SASL_JAAS_CONFIG}
+    producer:
+      acks: all                 # Strongest durability
+      retries: 5
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+        spring.json.add.type.headers: false
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+# ==============================================================================
+# Eureka — production registry (use HTTPS / mTLS in real deployments)
+# ==============================================================================
+eureka:
+  instance:
+    hostname: ${POD_IP:${HOSTNAME}}
+    non-secure-port-enabled: false
+    secure-port-enabled: true
+    secure-port: ${server.port}
+    lease-renewal-interval-in-seconds: 10
+    lease-expiration-duration-in-seconds: 30
+  client:
+    service-url:
+      defaultZone: ${EUREKA_DEFAULT_ZONE}
+    registry-fetch-interval-seconds: 15
+
+# ==============================================================================
+# CORS — strict allowlist in production
+# ==============================================================================
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS}   # e.g. https://app.eventslk.com,https://admin.eventslk.com
+
+# ==============================================================================
+# JWT — RSA keys MUST be provided via secret manager
+# ==============================================================================
+jwt:
+  rsa:
+    private-key: ${JWT_PRIVATE_KEY}
+    public-key: ${JWT_PUBLIC_KEY}
+
+# ==============================================================================
+# Server — production hardening
+# ==============================================================================
+server:
+  forward-headers-strategy: framework
+  tomcat:
+    accept-count: 200
+    max-connections: 8192
+    threads:
+      max: 400
+      min-spare: 50
+    accesslog:
+      enabled: true
+      directory: /var/log/evtreg
+      pattern: '%h %l %u %t "%r" %s %b %D'
+
+# ==============================================================================
+# Actuator — minimal exposure; metrics scraped by Prometheus
+# ==============================================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: db, redis, diskSpace
+        liveness:
+          include: ping
+  server:
+    port: ${MANAGEMENT_PORT:9081}   # Separate port; not exposed publicly
+
+# ==============================================================================
+# Logging — JSON for log shipping (Loki / ELK / Datadog)
+# ==============================================================================
+logging:
+  level:
+    root: INFO
+    com.event_registration: INFO
+    org.hibernate.SQL: OFF
+    org.apache.kafka: WARN
+  pattern:
+    console: '{"ts":"%d{yyyy-MM-dd''T''HH:mm:ss.SSSXXX}","level":"%p","logger":"%logger","thread":"%t","traceId":"%X{traceId:-}","spanId":"%X{spanId:-}","msg":"%m"}%n'
+
+# ==============================================================================
+# App
+# ==============================================================================
+app:
+  base-url: ${APP_BASE_URL}
+  admin:
+    email: ${APP_ADMIN_EMAIL}
+    password: ${APP_ADMIN_PASSWORD}
