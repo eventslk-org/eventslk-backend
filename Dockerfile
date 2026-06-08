@@ -1,26 +1,49 @@
-# ---- Stage 1: Build ----
-FROM maven:3.9-eclipse-temurin-21-alpine AS builder
+# syntax=docker/dockerfile:1.7
+###############################################################################
+# EventsLK :: event-registration-api — Java 21 / Spring Boot 3.5.14
+# Multi-stage, digest-pinned, non-root, healthchecked.
+###############################################################################
+
+# ---------- Stage 1: Build ----------
+# maven:3.9-eclipse-temurin-21 (digest resolved 2026-06-08), pinned by digest.
+FROM maven@sha256:d7e7f57407437c014571f1ad5a9955f03fc3edcb1d964067ef351fa38e798665 AS build
+
+WORKDIR /workspace
+
+# POM first -> dependency layer is cached unless pom.xml changes.
+COPY pom.xml ./
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -B -ntp dependency:go-offline
+
+COPY src ./src
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -B -ntp clean package -DskipTests
+
+# ---------- Stage 2: Runtime ----------
+# eclipse-temurin:21-jre-jammy (digest resolved 2026-06-08), pinned by digest.
+FROM eclipse-temurin@sha256:199aebeb3adcde4910695cdebfe782ada38dadb6cc8013159b58d3724451befd AS runtime
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 spring \
+    && useradd  --system --uid 10001 --gid spring --home-dir /app --no-create-home spring
+
 WORKDIR /app
 
-# Copy pom.xml first and download dependencies — this layer is cached
-# unless pom.xml changes, so subsequent builds are faster.
-COPY pom.xml .
-RUN mvn dependency:go-offline -B
+# *.jar matches the repackaged fat JAR (event-registration-api-1.0-SNAPSHOT.jar)
+# and skips the *.jar.original sidecar produced by spring-boot-maven-plugin.
+COPY --from=build --chown=spring:spring /workspace/target/*.jar app.jar
 
-# Copy source and build the JAR (skip tests — run them in CI separately)
-COPY src/ ./src/
-RUN mvn clean package -DskipTests -B
+USER 10001:10001
 
-# ---- Stage 2: Runtime ----
-FROM eclipse-temurin:21-jre-alpine
-WORKDIR /app
+# SERVER_PORT defaults to 8081 in application.yml.
+EXPOSE 8081
 
-# Copy only the built JAR from the builder stage
-COPY --from=builder /app/target/EventRegistrationAPI-1.0-SNAPSHOT.jar app.jar
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
+    CMD curl -fsS http://127.0.0.1:8081/actuator/health || exit 1
 
-EXPOSE 8080
-
-# All secrets and config are supplied as environment variables at runtime.
+# All secrets/config are injected as env vars at runtime — never baked in.
 # Required: DB_NAME, DB_USERNAME, DB_PASSWORD, JWT_SECRET
-# Optional (have defaults): DB_HOST (localhost), DB_PORT (3306)
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# Optional: DB_HOST (localhost), DB_PORT (5432), SERVER_PORT (8081)
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]

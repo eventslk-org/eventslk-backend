@@ -1,6 +1,15 @@
 # Exclude build output — the builder stage compiles from source
 target/
 
+# Version control — never ship .git history into the build context
+.git/
+.gitignore
+
+# CI / container metadata
+.github/
+Dockerfile
+.dockerignore
+
 # IDE and OS files
 .idea/
 .vscode/
