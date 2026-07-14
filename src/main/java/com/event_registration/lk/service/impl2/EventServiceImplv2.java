@@ -1,5 +1,6 @@
 package com.event_registration.lk.service.impl2;
 
+import com.event_registration.lk.config.CacheConfig;
 import com.event_registration.lk.dto.Event;
 import com.event_registration.lk.dto.PriceRange;
 import com.event_registration.lk.dto.response.EventResponse;
@@ -8,6 +9,8 @@ import com.event_registration.lk.repository.EventRepository;
 import com.event_registration.lk.service.EventService;
 import jakarta.transaction.Transactional;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
@@ -38,6 +41,7 @@ public class EventServiceImplv2 implements EventService {
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = CacheConfig.EVENTS_CACHE, allEntries = true)
     public EventResponse addEvent(Event event) {
         try {
             EventEntity entity = EventEntity.builder()
@@ -63,6 +67,7 @@ public class EventServiceImplv2 implements EventService {
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = CacheConfig.EVENTS_CACHE, allEntries = true)
     public EventResponse removeEvent(String id) {
         return eventRepository.findById(id)
                 .map(entity -> {
@@ -83,6 +88,7 @@ public class EventServiceImplv2 implements EventService {
      */
     @Override
     @Transactional
+    @CacheEvict(cacheNames = CacheConfig.EVENTS_CACHE, allEntries = true)
     public EventResponse updateEvent(Event event) {
         return eventRepository.findById(event.getEventId())
                 .map(entity -> {
@@ -103,11 +109,29 @@ public class EventServiceImplv2 implements EventService {
     }
 
     @Override
+    @Transactional
+    @Cacheable(cacheNames = CacheConfig.EVENTS_CACHE, key = "'all'")
     public EventResponse getAllEvents() {
         log.info("[event-list] fetching all events");
         ArrayList<Event> eventList = new ArrayList<>();
         eventRepository.findAll().forEach(entity -> eventList.add(toDto(entity)));
         return new EventResponse("event-list", "success", eventList);
+    }
+
+    @Override
+    @Transactional
+    @Cacheable(cacheNames = CacheConfig.EVENTS_CACHE, key = "#id", unless = "#result.eventList == null")
+    public EventResponse getEventById(String id) {
+        return eventRepository.findById(id)
+                .map(entity -> {
+                    ArrayList<Event> eventList = new ArrayList<>();
+                    eventList.add(toDto(entity));
+                    return new EventResponse("event-details", "success", eventList);
+                })
+                .orElseGet(() -> {
+                    log.warn("[event-details] not found eventId={}", id);
+                    return new EventResponse("event-details", "event not exists");
+                });
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

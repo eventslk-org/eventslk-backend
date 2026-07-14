@@ -4,6 +4,7 @@ import com.event_registration.lk.config.JwtKeyConfig.RsaKeyPair;
 import com.event_registration.lk.security.JwtRoleConverter;
 import com.event_registration.lk.security.ProblemDetailAccessDeniedHandler;
 import com.event_registration.lk.security.ProblemDetailAuthenticationEntryPoint;
+import jakarta.servlet.DispatcherType;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -95,10 +96,17 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable()) // stateless API; no cookies/sessions
                 .authorizeHttpRequests(auth -> auth
+                        // ERROR dispatches (forwards to /error after an exception or 404) must be
+                        // permitted, otherwise every server-side error is masked as a 401/403.
+                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/actuator/prometheus").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/event").permitAll()
+                        // Admin-only event operations must be matched before the public GET rules.
+                        .requestMatchers(HttpMethod.GET, "/event/upload-url").hasRole("ADMIN")
+                        // Public catalogue: event list and single-event details.
+                        .requestMatchers(HttpMethod.GET, "/event", "/event/*").permitAll()
                         .requestMatchers("/event/**").hasRole("ADMIN")
+                        .requestMatchers("/user/**").hasRole("ADMIN")
                         .requestMatchers("/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

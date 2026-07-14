@@ -11,5 +11,6 @@ public interface EventService {
     public EventResponse removeEvent(String id);
     public EventResponse updateEvent(Event event);
     public EventResponse getAllEvents();
+    public EventResponse getEventById(String id);
 
 }

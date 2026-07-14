@@ -1,5 +1,6 @@
 package com.event_registration.lk.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.Column;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -20,6 +21,9 @@ public class User {
     @NotBlank(message = "Username is required")
     private String username;
     
+    // WRITE_ONLY: accepted in request bodies (signup) but never serialized into
+    // responses, so password hashes can't leak through user listings.
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @NotBlank(message = "Password is required")
     private String password;
     

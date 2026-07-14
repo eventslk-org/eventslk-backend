@@ -1,5 +1,6 @@
 package com.event_registration.lk.service.impl;
 
+import com.event_registration.lk.dto.Role;
 import com.event_registration.lk.dto.User;
 import com.event_registration.lk.dto.request.LoginRequest;
 import com.event_registration.lk.dto.response.UserResponse;
@@ -78,7 +79,9 @@ public class UserServiceImpl implements UserService {
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .password(passwordEncoder.encode(user.getPassword()))
-                .role(user.getRole())
+                // Never trust a client-supplied role: public signup always creates a
+                // plain USER. Admins are provisioned via AdminUserInitializer only.
+                .role(Role.USER)
                 .emailVerified(false)
                 .verificationToken(verificationToken)
                 .verificationTokenExpiresAt(expiresAt)

@@ -20,22 +20,22 @@ spring:
   # JPA / Hibernate — performance-oriented defaults
   # ----------------------------------------------------------------------------
   jpa:
-    open-in-view: false   # Avoid OSIV anti-pattern; transactions stay in service layer
+    open-in-view: false # Avoid OSIV anti-pattern; transactions stay in service layer
     properties:
       hibernate:
-        jdbc.batch_size: 25         # Batch multiple inserts/updates
+        jdbc.batch_size: 25 # Batch multiple inserts/updates
         order_inserts: true
         order_updates: true
-        batch_versioned_data: true  # Avoid pre-update SELECT for versioned entities
-        query.in_clause_parameter_padding: true  # Reduces SQL plan cache churn
+        batch_versioned_data: true # Avoid pre-update SELECT for versioned entities
+        query.in_clause_parameter_padding: true # Reduces SQL plan cache churn
 
   # ----------------------------------------------------------------------------
   # JSON serialization
   # ----------------------------------------------------------------------------
   jackson:
-    default-property-inclusion: non_null     # Omit null fields from responses
+    default-property-inclusion: non_null # Omit null fields from responses
     serialization:
-      WRITE_DATES_AS_TIMESTAMPS: false       # ISO-8601 dates
+      WRITE_DATES_AS_TIMESTAMPS: false # ISO-8601 dates
 
   # ----------------------------------------------------------------------------
   # HikariCP — common pool sizing. Profiles may override pool size.
@@ -44,9 +44,9 @@ spring:
     hikari:
       maximum-pool-size: 15
       minimum-idle: 5
-      idle-timeout: 30000          # 30s
-      max-lifetime: 1800000        # 30min
-      connection-timeout: 20000    # 20s
+      idle-timeout: 30000 # 30s
+      max-lifetime: 1800000 # 30min
+      connection-timeout: 20000 # 20s
       leak-detection-threshold: 30000
 
 # ==============================================================================
@@ -109,13 +109,29 @@ management:
     health:
       probes:
         enabled: true
-      show-details: never        # Override to "always" in dev only
+      show-details: never # Override to "always" in dev only
     prometheus:
       enabled: true
   prometheus:
     metrics:
       export:
         enabled: true
+
+# ==============================================================================
+# S3 image uploads (presigned PUT URLs)
+# Empty bucket-name => mock mode (placeholder URLs, no AWS needed in dev).
+# access/secret keys are for local dev only; in AWS the default credential
+# chain picks up the workload's IAM role (EC2 instance profile / EKS IRSA).
+# public-base-url: set to your CloudFront domain to serve images via CDN;
+# empty derives the direct S3 URL.
+# ==============================================================================
+aws:
+  s3:
+    bucket-name: ${AWS_S3_BUCKET:}
+    region: ${AWS_REGION:ap-south-1}
+    public-base-url: ${AWS_S3_PUBLIC_BASE_URL:}
+    access-key: ${AWS_S3_ACCESS_KEY:}
+    secret-key: ${AWS_S3_SECRET_KEY:}
 
 # ==============================================================================
 # Application-specific

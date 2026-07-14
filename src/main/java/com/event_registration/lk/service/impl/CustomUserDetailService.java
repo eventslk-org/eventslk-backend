@@ -1,5 +1,6 @@
 package com.event_registration.lk.service.impl;
 
+import com.event_registration.lk.dto.Role;
 import com.event_registration.lk.entity.UserEntity;
 import com.event_registration.lk.repository.UserRepository;
 import org.springframework.security.core.userdetails.*;
@@ -21,10 +22,14 @@ public class CustomUserDetailService implements UserDetailsService {
                 .findByEmailIgnoreCase(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
 
+        // Legacy rows may have a NULL role (signups predating the enforced default);
+        // treat them as plain users instead of failing authentication with an NPE.
+        Role role = user.getRole() != null ? user.getRole() : Role.USER;
+
         return org.springframework.security.core.userdetails.User.builder()
                 .username(user.getEmail())
                 .password(user.getPassword())
-                .roles(user.getRole().name()) // Assuming enum Role.USER, etc.
+                .roles(role.name())
                 .disabled(!user.isEmailVerified())
                 .build();
     }
