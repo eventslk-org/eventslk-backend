@@ -35,7 +35,7 @@ spring:
       driver-class-name: org.postgresql.Driver
       hikari:
         pool-name: HikariReplica
-        maximum-pool-size: 30        # Reads typically outnumber writes — pool larger
+        maximum-pool-size: 30 # Reads typically outnumber writes — pool larger
         minimum-idle: 10
         idle-timeout: 30000
         max-lifetime: 1800000
@@ -75,7 +75,7 @@ spring:
         enabled: ${REDIS_SSL_ENABLED:true}
       sentinel:
         master: ${REDIS_SENTINEL_MASTER:evtreg-master}
-        nodes: ${REDIS_SENTINEL_NODES}        # host1:26379,host2:26379,host3:26379
+        nodes: ${REDIS_SENTINEL_NODES} # host1:26379,host2:26379,host3:26379
         password: ${REDIS_SENTINEL_PASSWORD:}
       lettuce:
         pool:
@@ -91,10 +91,10 @@ spring:
   cache:
     type: redis
     redis:
-      time-to-live: 1800000     # 30 min default; per-cache TTL set in CacheConfig
+      time-to-live: 1800000 # 30 min default; per-cache TTL set in CacheConfig
       cache-null-values: false
       use-key-prefix: true
-      key-prefix: "evtreg:prod:"
+      key-prefix: 'evtreg:prod:'
 
   # ----------------------------------------------------------------------------
   # Kafka — production cluster with SASL/SSL
@@ -106,7 +106,7 @@ spring:
       sasl.mechanism: ${KAFKA_SASL_MECHANISM:SCRAM-SHA-512}
       sasl.jaas.config: ${KAFKA_SASL_JAAS_CONFIG}
     producer:
-      acks: all                 # Strongest durability
+      acks: all # Strongest durability
       retries: 5
       properties:
         enable.idempotence: true
@@ -135,7 +135,7 @@ eureka:
 # CORS — strict allowlist in production
 # ==============================================================================
 cors:
-  allowed-origins: ${CORS_ALLOWED_ORIGINS}   # e.g. https://app.eventslk.com,https://admin.eventslk.com
+  allowed-origins: ${CORS_ALLOWED_ORIGINS} # e.g. https://app.eventslk.com,https://admin.eventslk.com
 
 # ==============================================================================
 # JWT — RSA keys MUST be provided via secret manager
@@ -180,7 +180,7 @@ management:
         liveness:
           include: ping
   server:
-    port: ${MANAGEMENT_PORT:9081}   # Separate port; not exposed publicly
+    port: ${MANAGEMENT_PORT:9081} # Separate port; not exposed publicly
 
 # ==============================================================================
 # Logging — JSON for log shipping (Loki / ELK / Datadog)
@@ -189,7 +189,7 @@ logging:
   level:
     root: INFO
     com.event_registration: INFO
-    org.hibernate.SQL: OFF
+    org.hibernate.SQL: 'OFF'
     org.apache.kafka: WARN
   pattern:
     console: '{"ts":"%d{yyyy-MM-dd''T''HH:mm:ss.SSSXXX}","level":"%p","logger":"%logger","thread":"%t","traceId":"%X{traceId:-}","spanId":"%X{spanId:-}","msg":"%m"}%n'

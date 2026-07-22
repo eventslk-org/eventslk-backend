@@ -224,12 +224,19 @@
             </configuration>
         </plugin>
         
-        <!-- GraalVM Native Build Tools -->
-        <plugin>
-            <groupId>org.graalvm.buildtools</groupId>
-            <artifactId>native-maven-plugin</artifactId>
-        </plugin>
+        
+        
     </plugins>
     </build>
 
 </project>
+
+<!-- 
+
+    <!-- GraalVM Native Build Tools -->
+        <plugin>
+            <groupId>org.graalvm.buildtools</groupId>
+            <artifactId>native-maven-plugin</artifactId>
+        </plugin>
+
+ -->
